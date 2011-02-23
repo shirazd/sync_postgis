@@ -1,0 +1,4 @@
+; $Id$
+name = Sync PostGIS
+description = Sync OpenLayers or Geo Data to PostGIS for advanced querying
+core = 7.x

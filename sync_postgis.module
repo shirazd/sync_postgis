@@ -1,0 +1,68 @@
+<?php
+
+function sync_postgis_pgconn(){
+  $pgconn = pg_connect("host=localhost dbname=sync_postgis user=user password=password");
+  if (!$pgconn) {
+    drupal_set_message("Error conecting to postGIS database.",'error');
+  }
+  return $pgconn;
+}
+
+function sync_postgis_node_insert($node) {
+  sync_postgis_insert_update($node, 'insert');
+}
+
+function sync_postgis_node_update($node) {
+  sync_postgis_insert_update($node, 'update');
+}
+
+function sync_postgis_node_delete($node) {
+  $pgconn = sync_postgis_pgconn();
+  $deleted = pg_query($pgconn,"DELETE from node WHERE nid = ".$node->nid);
+}
+
+function sync_postgis_insert_update(&$node, $op) {
+  $config = array (
+    'region' => 'field_region_extent',
+    'post' => 'field_post_location',
+  );
+    
+  if ($field_id = $config[$node->type]) {
+      
+    $field = $node->$field_id;
+      
+    $wkta = array();
+      
+    //@@TODO: deal with language
+    foreach ($field['en'] as $delta) {
+      $wkta[] = $delta['wkt'];
+    }
+      
+    if ($wkta[0]) {
+      
+      $pgconn = sync_postgis_pgconn();
+      
+      if ($op == 'update') {
+        $deleted = pg_query($pgconn,"DELETE from node WHERE nid = ".$node->nid);
+      }
+        
+      foreach ($wkta as $wkt) {
+	      $pg_query = "INSERT INTO node (nid, type, title, geom, geom_albers) VALUES (";
+	        
+	      $pg_query .= $node->nid.", ";
+	      $pg_query .= "'".$node->type."', ";
+	      $pg_query .= "'".pg_escape_string($node->title)."', ";
+	      $pg_query .= "GeomFromText('".$wkt."', 4326)".", ";
+	      $pg_query .= "st_transform(GeomFromText('".$wkt."', 4326), 3005)";
+	      $pg_query .= ");";
+	            
+	      $result = pg_query($pgconn,$pg_query);
+	        
+	      if (!$result) {
+	        dpm($pg_query);
+	      }
+      }
+    }
+  }
+}
+
