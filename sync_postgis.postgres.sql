@@ -31,13 +31,12 @@ COPY geometry_columns (f_table_catalog, f_table_schema, f_table_name, f_geometry
 	public	node	geom_albers	2	3005	GEOMETRY
 \.
 
-SET default_with_oids = false;
-
 --
 -- Name: node; Type: TABLE; Schema: public; Owner: fnfn; Tablespace: 
 --
 
 CREATE TABLE node (
+    id serial PRIMARY KEY,
     nid integer,
     type text,
     field text,

@@ -8,12 +8,22 @@ function sync_postgis_pgconn(){
   return $pgconn;
 }
 
-function sync_postgis_node_insert($node) {
-  sync_postgis_insert_update($node, 'insert');
+// We preferentially use presave as it allows other modules to use hook_presave and alter a node while making use of postGIS info
+function sync_postgis_node_presave($node) {
+  if ($node->nid) {
+    sync_postgis_insert_update($node, 'update');
+  }
+  else {
+    sync_postgis_insert_update($node, 'insert');
+  }
 }
 
-function sync_postgis_node_update($node) {
-  sync_postgis_insert_update($node, 'update');
+function sync_postgis_node_insert($node) {
+  // We've done an insert, time to circle back and fill in the nid on the postgis table
+  $pgconn = sync_postgis_pgconn();
+  foreach ($node->sync_postgis as $row) {
+    $updated = pg_query($pgconn,"UPDATE node SET nid = ".$node->nid." WHERE id = ".$row['postgis_id']);
+  }
 }
 
 function sync_postgis_node_delete($node) {
@@ -22,49 +32,64 @@ function sync_postgis_node_delete($node) {
 }
 
 function sync_postgis_insert_update(&$node, $op) {
+
   //@@TODO: Push these out to a config page
   // node_type => field_name
   $config = array (
     'region' => 'field_region_extent',
     'post' => 'field_post_location',
   );
-    
+  
+  //@@TOOD: loop through all possible field / node combinations specified in config
   if ($field_id = $config[$node->type]) {
-      
+    
     $field = $node->$field_id;
-      
-    $wkta = array();
-      
+    
     //@@TODO: deal with language
-    foreach ($field['en'] as $delta => $item) {
-      $wkta[$delta] = $item['wkt'];
-    }
-      
-    if ($wkta[0]) {
+    if ($field['en'][0]['wkt']) {
       $pgconn = sync_postgis_pgconn();
+      $node->sync_postgis = array();
       
+      // Delete any existing values for this node / field
       if ($op == 'update') {
-        $deleted = pg_query($pgconn,"DELETE from node WHERE nid = ".$node->nid);
+        $deleted = pg_query($pgconn,"DELETE from node WHERE nid = ".$node->nid." AND field = '".$field_id."'");
       }
-        
-      foreach ($wkta as $delta => $wkt) {
-	      $pg_query = "INSERT INTO node (nid, type, field, delta, title, geom, geom_albers) VALUES (";
-	        
-	      $pg_query .= $node->nid.", ";
-	      $pg_query .= "'".$node->type."', ";
-	      $pg_query .= "'".$field_id."', ";
-	      $pg_query .= "'".$delta."', ";
-	      $pg_query .= "'".pg_escape_string($node->title)."', ";
-	      $pg_query .= "GeomFromText('".$wkt."', 4326)".", ";
-	      $pg_query .= "st_transform(GeomFromText('".$wkt."', 4326), 3005)";
-	      $pg_query .= ");";
-	            
-	      $result = pg_query($pgconn,$pg_query);
-	        
-	      if (!$result) {
-	        dpm($pg_query);
-	      }
-      }
+      
+      foreach ($field['en'] as $delta => $item) {
+        $wkt = $item['wkt'];
+  	    $pg_query = "INSERT INTO node (nid, type, field, delta, title, geom, geom_albers) VALUES (";
+  	    
+  	    // Mark nid as null if we are doing an insert
+  	    if ($op == 'update') {
+  	      $pg_query .= $node->nid.", ";
+  	    }
+  	    if ($op == 'insert') {
+  	      $pg_query .= "NULL, ";
+  	    }
+  	    
+  	    $pg_query .= "'".$node->type."', ";
+  	    $pg_query .= "'".$field_id."', ";
+  	    $pg_query .= "'".$delta."', ";
+  	    $pg_query .= "'".pg_escape_string($node->title)."', ";
+  	    $pg_query .= "GeomFromText('".$wkt."', 4326)".", ";
+  	    $pg_query .= "st_transform(GeomFromText('".$wkt."', 4326), 3005)";
+  	    $pg_query .= ") RETURNING id;";
+  	          
+  	    $result = pg_query($pgconn,$pg_query);
+  	    
+  	    //@@TODO: Store this in a sync_postgis mysql table
+  	    $postgis_id = pg_fetch_object($result);
+  	    $node->sync_postgis[$postgis_id->id] = array (
+  	      'postgis_id' => $postgis_id->id,
+  	      'nid' => $node->nid,
+  	      'field' => $field_id,
+  	      'delta' => $delta,
+  	    );
+  	    
+  	    if (!$result) {
+  	      dpm($pg_query);
+  	    }
+  	  }
     }
   }
 }
