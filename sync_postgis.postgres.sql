@@ -40,6 +40,8 @@ SET default_with_oids = false;
 CREATE TABLE node (
     nid integer,
     type text,
+    field text,
+    delta integer,
     geom geometry,
     geom_albers geometry,
     title text,

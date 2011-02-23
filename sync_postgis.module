@@ -22,6 +22,8 @@ function sync_postgis_node_delete($node) {
 }
 
 function sync_postgis_insert_update(&$node, $op) {
+  //@@TODO: Push these out to a config page
+  // node_type => field_name
   $config = array (
     'region' => 'field_region_extent',
     'post' => 'field_post_location',
@@ -34,23 +36,24 @@ function sync_postgis_insert_update(&$node, $op) {
     $wkta = array();
       
     //@@TODO: deal with language
-    foreach ($field['en'] as $delta) {
-      $wkta[] = $delta['wkt'];
+    foreach ($field['en'] as $delta => $item) {
+      $wkta[$delta] = $item['wkt'];
     }
       
     if ($wkta[0]) {
-      
       $pgconn = sync_postgis_pgconn();
       
       if ($op == 'update') {
         $deleted = pg_query($pgconn,"DELETE from node WHERE nid = ".$node->nid);
       }
         
-      foreach ($wkta as $wkt) {
-	      $pg_query = "INSERT INTO node (nid, type, title, geom, geom_albers) VALUES (";
+      foreach ($wkta as $delta => $wkt) {
+	      $pg_query = "INSERT INTO node (nid, type, field, delta, title, geom, geom_albers) VALUES (";
 	        
 	      $pg_query .= $node->nid.", ";
 	      $pg_query .= "'".$node->type."', ";
+	      $pg_query .= "'".$field_id."', ";
+	      $pg_query .= "'".$delta."', ";
 	      $pg_query .= "'".pg_escape_string($node->title)."', ";
 	      $pg_query .= "GeomFromText('".$wkt."', 4326)".", ";
 	      $pg_query .= "st_transform(GeomFromText('".$wkt."', 4326), 3005)";
