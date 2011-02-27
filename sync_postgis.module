@@ -44,9 +44,9 @@ function sync_postgis_insert_update(&$node, $op) {
   if ($field_id = $config[$node->type]) {
     
     $field = $node->$field_id;
+    $lang = $node->language;
     
-    //@@TODO: deal with language
-    if ($field['en'][0]['wkt']) {
+    if (!empty($field[$lang][0]['wkt'])) {
       $pgconn = sync_postgis_pgconn();
       $node->sync_postgis = array();
       
@@ -55,7 +55,7 @@ function sync_postgis_insert_update(&$node, $op) {
         $deleted = pg_query($pgconn,"DELETE from node WHERE nid = ".$node->nid." AND field = '".$field_id."'");
       }
       
-      foreach ($field['en'] as $delta => $item) {
+      foreach ($field[$lang] as $delta => $item) {
         $wkt = $item['wkt'];
   	    $pg_query = "INSERT INTO node (nid, type, field, delta, title, geom, geom_albers) VALUES (";
   	    
@@ -77,7 +77,7 @@ function sync_postgis_insert_update(&$node, $op) {
   	          
   	    $result = pg_query($pgconn,$pg_query);
   	    
-  	    //@@TODO: Store this in a sync_postgis mysql table
+  	    //@@TODO: Store this in a sync_postgis mysql table so that it persists when a node is saved
   	    $postgis_id = pg_fetch_object($result);
   	    $node->sync_postgis[$postgis_id->id] = array (
   	      'postgis_id' => $postgis_id->id,
@@ -85,10 +85,6 @@ function sync_postgis_insert_update(&$node, $op) {
   	      'field' => $field_id,
   	      'delta' => $delta,
   	    );
-  	    
-  	    if (!$result) {
-  	      dpm($pg_query);
-  	    }
   	  }
     }
   }
